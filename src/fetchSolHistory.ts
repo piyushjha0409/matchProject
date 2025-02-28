@@ -26,16 +26,16 @@ export async function fetchHistoricalTokenData(address: string, chain: string) {
     const coinId = metadata.data?.attributes.coingecko_coin_id;
 
     // logger.log(`This is the metadata response ${metadata.data}`, 'DEBUG');
-    
+
     // Fetch historical price & market cap (6h, 12h, 24h)
     const historicalData = await fetchHistoricalPriceData(coinId);
-    
+
     // Fetch transaction count
     const transactions = await getTransactionCount(address);
-    
+
     // Fetch holders count
     const holders = await getTokenHolderCount(address);
-    
+
     const result = {
       address,
       name: metadata.data?.attributes.name,
@@ -113,39 +113,76 @@ async function fetchHistoricalPriceData(coinId: string) {
     const marketCaps = response.market_caps;
     const volumes = response.total_volumes;
 
-    const getIndex = (hours: number) =>
-      Math.floor((hours / (days * 24)) * prices.length);
+    // const getIndex = (hours: number) => {
+    //     const pointsToGoBack = Math.round(hours * pointsPerHour)
+    //     return pointsToGoBack > prices.length ? prices.length - 1 : prices.length - pointsToGoBack;
+    // }
+
+    const findClosestIndex = (dataArray: any, targetTime: any) => {
+      let closestIndex = 0;
+      let smallDiff = Math.abs(dataArray[0][0] - targetTime);
+
+      for (let i = 1; i < dataArray.length; i++) {
+        const diff = Math.abs(dataArray[i][0] - targetTime);
+        if (diff < smallDiff) {
+          smallDiff = diff;
+          closestIndex = i;
+        }
+      }
+
+      return closestIndex;
+    };
+
+    const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
+    const twelveHoursAgo = Date.now() - 12 * 60 * 60 * 1000;
+    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const fourtyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+    const sixHoursAgoIndex = findClosestIndex(prices, sixHoursAgo);
+    const twelveHoursAgoIndex = findClosestIndex(prices, twelveHoursAgo);
+    const twentyFourHoursAgoIndex = findClosestIndex(
+      prices,
+      twentyFourHoursAgo
+    );
+    const fourtyEightHoursAgoIndex = findClosestIndex(
+      prices,
+      fourtyEightHoursAgo
+    );
+    const sevenDaysAgoIndex = findClosestIndex(prices, sevenDaysAgo);
+    const thirtyDaysAgoIndex = findClosestIndex(prices, thirtyDaysAgo);
 
     return {
       "6h": {
-        price: prices[getIndex(6)][1],
-        marketCap: marketCaps[getIndex(6)][1],
-        volume: volumes[getIndex(6)][1],
+        price: prices[sixHoursAgoIndex][1],
+        marketCap: marketCaps[sixHoursAgoIndex][1],
+        volume: volumes[sixHoursAgoIndex][1],
       },
       "12h": {
-        price: prices[getIndex(12)][1],
-        marketCap: marketCaps[getIndex(12)][1],
-        volume: volumes[getIndex(12)][1],
+        price: prices[twelveHoursAgoIndex][1],
+        marketCap: marketCaps[twelveHoursAgoIndex][1],
+        volume: volumes[twelveHoursAgoIndex][1],
       },
       "24h": {
-        price: prices[getIndex(24)][1],
-        marketCap: marketCaps[getIndex(24)][1],
-        volume: volumes[getIndex(24)][1],
+        price: prices[twentyFourHoursAgoIndex][1],
+        marketCap: marketCaps[twentyFourHoursAgoIndex][1],
+        volume: volumes[twentyFourHoursAgoIndex][1],
       },
       "48h": {
-        price: prices[getIndex(48)][1],
-        marketCap: marketCaps[getIndex(48)][1],
-        volume: volumes[getIndex(48)][1],
+        price: prices[fourtyEightHoursAgoIndex][1],
+        marketCap: marketCaps[fourtyEightHoursAgoIndex][1],
+        volume: volumes[fourtyEightHoursAgoIndex][1],
       },
       "7d": {
-        price: prices[getIndex(7 * 24)][1],
-        marketCap: marketCaps[getIndex(7 * 24)][1],
-        volume: volumes[getIndex(7 * 24)][1],
+        price: prices[sevenDaysAgoIndex][1],
+        marketCap: marketCaps[sevenDaysAgoIndex][1],
+        volume: volumes[sevenDaysAgoIndex][1],
       },
       "30d": {
-        price: prices[getIndex(30 * 24) - 1][1], // Get last available data for 30d
-        marketCap: marketCaps[getIndex(30 * 24) - 1][1],
-        volume: volumes[getIndex(30 * 24) - 1][1],
+        price: prices[thirtyDaysAgoIndex][1], // Get last available data for 30d
+        marketCap: marketCaps[thirtyDaysAgoIndex][1],
+        volume: volumes[thirtyDaysAgoIndex][1],
       },
     };
   } catch (error) {
@@ -209,7 +246,7 @@ async function getTokenHolderCount(address: string) {
           },
         }
       );
-      if(!response) throw "Failed api call";
+      if (!response) throw "Failed api call";
       const holdersCount =
         response?.data?.Solana?.BalanceUpdates[0]?.holders || 0;
       results[label] = holdersCount;
