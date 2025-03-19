@@ -1,3 +1,5 @@
+//TODO: to rectify this
+
 import axios, { AxiosResponse } from "axios";
 import { makeRequest } from "./utils/requestHandler.js";
 import { logger } from "./utils/logger.js";
@@ -10,8 +12,14 @@ configDotenv();
 const COINGECKO_API = process.env.COINGECKO_API_KEY as string;
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY2 as string;
 const BITQUERY_API_KEY = process.env.BITQUERY_API_KEY as string;
+const SOLSCAN_API_KEY = process.env.SOLSCAN_API_KEY as string;
 
-//
+/**
+ * Hero function to fetch historical data for a token
+ * @param address
+ * @param chain
+ * @returns
+ */
 export async function fetchHistoricalTokenData(address: string, chain: string) {
   try {
     // Fetch token metadata from CoinGecko
@@ -25,10 +33,9 @@ export async function fetchHistoricalTokenData(address: string, chain: string) {
     const metadata = metadataResponse;
     const coinId = metadata.data?.attributes.coingecko_coin_id;
 
-    // logger.log(`This is the metadata response ${metadata.data}`, 'DEBUG');
 
     // Fetch historical price & market cap (6h, 12h, 24h)
-    const historicalData = await fetchHistoricalPriceData(coinId);
+    const historicalData = await fetchHistoricalPriceData(coinId, address);
 
     // Fetch transaction count
     const transactions = await getTransactionCount(address);
@@ -95,14 +102,48 @@ export async function fetchHistoricalTokenData(address: string, chain: string) {
   }
 }
 
+const fetchLaunchDate = async (address: string) => {
+  try {
+    const response = await makeRequest(
+      `https://pro-api.solscan.io/v2.0/token/meta?address=${address}`,
+      {
+        headers: {
+          token: SOLSCAN_API_KEY,
+        },
+      }
+    );
+
+    if (!response) throw "Error in API Call";
+
+    logger.log(`Recieved response for launch date ${response}`, "INFO");
+    return response.data.created_time;
+  } catch (err) {
+    logger.log("Error fetching the launch date from the api", "ERROR");
+  }
+};
+
 /**
  * Fetch historical price and market cap data from CoinGecko.
  */
-async function fetchHistoricalPriceData(coinId: string) {
+
+//TODO: to rectify this for first
+async function fetchHistoricalPriceData(coinId: string, address: string) {
   try {
-    const days = 30; // Fetching max required days in a single call
+    const launchDate = await fetchLaunchDate(address);
+
+    if (!launchDate) {
+      throw new Error("Failed to get the launch date");
+    }
+
+    const sixHoursAfter = launchDate + 6 * 60 * 60;
+    const twelveHoursAfter = launchDate + 12 * 60 * 60;
+    const twentyFourHoursAfter = launchDate + 24 * 60 * 60;
+    const fourtyEightHoursAfter = launchDate + 48 * 60 * 60;
+    const sevenDaysAfter = launchDate + 7 * 24 * 60 * 60;
+    const thirtyDaysAfter = launchDate + 30 * 24 * 60 * 60;
+
     const response = await makeRequest(
-      `https://pro-api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`,
+      `https://pro-api.coingecko.com/api/v3/coins/${coinId}/contract/${address}/market_chart?vs_currency=usd&from=${launchDate}&to=${thirtyDaysAfter}`,
       {
         headers: { "x-cg-pro-api-key": COINGECKO_API },
       }
@@ -112,11 +153,6 @@ async function fetchHistoricalPriceData(coinId: string) {
     const prices = response.prices;
     const marketCaps = response.market_caps;
     const volumes = response.total_volumes;
-
-    // const getIndex = (hours: number) => {
-    //     const pointsToGoBack = Math.round(hours * pointsPerHour)
-    //     return pointsToGoBack > prices.length ? prices.length - 1 : prices.length - pointsToGoBack;
-    // }
 
     const findClosestIndex = (dataArray: any, targetTime: any) => {
       let closestIndex = 0;
@@ -133,25 +169,18 @@ async function fetchHistoricalPriceData(coinId: string) {
       return closestIndex;
     };
 
-    const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
-    const twelveHoursAgo = Date.now() - 12 * 60 * 60 * 1000;
-    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
-    const fourtyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-    const sixHoursAgoIndex = findClosestIndex(prices, sixHoursAgo);
-    const twelveHoursAgoIndex = findClosestIndex(prices, twelveHoursAgo);
+    const sixHoursAgoIndex = findClosestIndex(prices, sixHoursAfter);
+    const twelveHoursAgoIndex = findClosestIndex(prices, twelveHoursAfter);
     const twentyFourHoursAgoIndex = findClosestIndex(
       prices,
-      twentyFourHoursAgo
+      twentyFourHoursAfter
     );
     const fourtyEightHoursAgoIndex = findClosestIndex(
       prices,
-      fourtyEightHoursAgo
+      fourtyEightHoursAfter
     );
-    const sevenDaysAgoIndex = findClosestIndex(prices, sevenDaysAgo);
-    const thirtyDaysAgoIndex = findClosestIndex(prices, thirtyDaysAgo);
+    const sevenDaysAgoIndex = findClosestIndex(prices, sevenDaysAfter);
+    const thirtyDaysAgoIndex = findClosestIndex(prices, thirtyDaysAfter);
 
     return {
       "6h": {
@@ -193,6 +222,8 @@ async function fetchHistoricalPriceData(coinId: string) {
 /**
  * Fetch holders count for Solana or EVM.
  */
+
+//TODO: to rectify this for first
 async function getTokenHolderCount(address: string) {
   const timeFrames = {
     "6h": new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
@@ -260,6 +291,8 @@ async function getTokenHolderCount(address: string) {
 /**
  * Function for getting the transactions count
  */
+
+//TODO: to rectify this for first
 async function getTransactionCount(address: string) {
   const timeFrames = {
     "6h": new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),

@@ -33,6 +33,7 @@ export async function getHistoricalEVMTokenData(
     if (!metadataResponse) throw "Failed to fetch metadata of the token";
 
     const coinId = metadataResponse.data.attributes.coingecko_coin_id;
+
     const historicalData = await fetchHistoricalPriceData(coinId);
     const launchDateAndMarketCap = await getLaunchDateAndMarketCap(
       address,
@@ -155,6 +156,7 @@ async function getLaunchDateAndMarketCap(address: string, chain: string) {
  * @param coinId
  * @returns
  */
+//TODO: to rectify this for first 
 async function fetchHistoricalPriceData(coinId: string) {
   try {
     const days = 30; // Fetching max required days in a single call
@@ -217,6 +219,8 @@ async function fetchHistoricalPriceData(coinId: string) {
  * @param address
  * @returns
  */
+
+//TODO: to rectify this for first 
 async function getHoldersCount(address: string, chain: string) {
   try {
     const fromDate = new Date();
@@ -323,6 +327,7 @@ function processHoldersData(
  * @param chain
  */
 
+//TODO: to rectify this for first 
 async function getTransactionCount(address: string) {
   const timeFrames = {
     "6h": new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),

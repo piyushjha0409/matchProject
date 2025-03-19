@@ -61,6 +61,31 @@ export async function fetchTokenData(address: string, chain: string) {
 }
 
 /**
+ * fetching the token liquidity
+ * @param address
+ * @returns
+ */
+const fetchLaunchDate = async (address: string) => {
+  try {
+    const response = await makeRequest(
+      `https://pro-api.solscan.io/v2.0/token/meta?address=${address}`,
+      {
+        headers: {
+          token: SOLSCAN_API_KEY,
+        },
+      }
+    );
+
+    if (!response) throw "Error in API Call";
+
+    logger.log(`Recieved response for launch date ${response}`, "INFO");
+    return response.data.created_time;
+  } catch (err) {
+    logger.log("Error fetching the launch date from the api", "ERROR");
+  }
+};
+
+/**
  *  Function for getting the liquidity
  * @param address
  * @param network
@@ -93,24 +118,36 @@ async function getLiquidity(address: string, network: string) {
  * @returns
  */
 async function getTotalVolume(address: string, chain: string) {
+  const launchDate = await fetchLaunchDate(address);
+  const tillTimeStamp = launchDate + 30 * 24 * 60 * 60;
   try {
     // Fetch the market chart data (max 30 days)
     const response = await makeRequest(
-      `https://pro-api.coingecko.com/api/v3/coins/${chain}/contract/${address}/market_chart?vs_currency=usd&days=${30}`,
+      `https://pro-api.coingecko.com/api/v3/coins/${chain}/contract/${address}/market_chart/range?vs_currency=usd&from=${launchDate}&to=${tillTimeStamp}`,
       {
         headers: {
           "x-cg-pro-api-key": COINGECKO_API,
         },
       }
     );
-    if (!response) throw "failed API call";
+    if (!response || !response.total_volumes) throw "failed API call";
 
     // Compute total volumes for each time frame
-    const results = response.total_volumes;
-    const getIndex = (hours: number) =>
-      Math.floor((hours / (30 * 24)) * results.length);
-
+    const results = response.total_volumes.filter(([timeStamp]: any) => {
+      return timeStamp >= launchDate * 1000; //converting it back to milliseconds
+    });
+      
+    if(results.length === 0) throw "No data available after launch date";
+    
+    const getIndex = (hours: number) => {
+        const timeDiff = tillTimeStamp - launchDate;
+        const targetTime = hours * 3600;
+        const ratio = targetTime / timeDiff;
+        return Math.floor(ratio * results.length)
+    }
+    
     logger.log(`success getTotalVolume`, "INFO");
+
     return {
       "6h": results[getIndex(6)][1],
       "12h": results[getIndex(12)][1],
@@ -131,20 +168,21 @@ async function getTotalVolume(address: string, chain: string) {
  * @param chain
  */
 async function getTransactionCount(address: string) {
+  const launchDate = await fetchLaunchDate(address);
   const timeFrames = {
-    "6h": new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-    "12h": new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-    "24h": new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    "48h": new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-    "7d": new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    "30d": new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    "6h": new Date(launchDate + 6 * 60 * 60).toISOString(),
+    "12h": new Date(launchDate + 12 * 60 * 60).toISOString(),
+    "24h": new Date(launchDate + 24 * 60 * 60).toISOString(),
+    "48h": new Date(launchDate + 48 * 60 * 60).toISOString(),
+    "7d": new Date(launchDate + 7 * 24 * 60 * 60).toISOString(),
+    "30d": new Date(launchDate + 30 * 24 * 60 * 60).toISOString(),
   };
 
   let results: Record<string, number | null> = {};
 
   for (const [interval, since] of Object.entries(timeFrames)) {
     try {
-      const till = new Date().toISOString(); // Current timestamp
+      const till = launchDate + 30 * 24 * 60 * 60;
       const query = JSON.stringify({
         query: `{
           Solana(network: solana) {
@@ -159,7 +197,7 @@ async function getTransactionCount(address: string) {
                 },
                 Block: {
                   Time: {
-                    since: "${since}",
+                    since: "${launchDate}",
                     till: "${till}"
                   }
                 },

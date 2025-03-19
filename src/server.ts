@@ -1,7 +1,6 @@
 import express, { Request, Response } from "express";
 import { fetchTokenDetails } from "./index.js";
 import { configDotenv } from "dotenv";
-import { execArgv } from "process";
 
 configDotenv();
 
@@ -12,7 +11,7 @@ interface TokenRequestBody {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Middleware to parse JSON requests
 app.use(express.json());
